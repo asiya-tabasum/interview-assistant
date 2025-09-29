@@ -101,7 +101,7 @@ async def upload_resume(file: UploadFile = File(...)):
     if not file.filename.endswith(('.pdf', '.docx')):
         raise HTTPException(status_code=400, detail="File must be PDF or DOCX")
     
-    # Save file
+    # Save filep
     file_path = f"uploads/{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
