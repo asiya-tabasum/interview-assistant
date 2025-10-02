@@ -1,7 +1,7 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 
-function Layout({ children }) {
+function Layout() {
   const location = useLocation();
 
   const tabs = [
@@ -37,7 +37,7 @@ function Layout({ children }) {
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-4 sm:px-0">
-          {children}
+          <Outlet />
         </div>
       </main>
     </div>

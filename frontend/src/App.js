@@ -14,14 +14,10 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Title />} />
-            <Route path="/interview" element={
-              <Layout>
-                <Routes>
-                  <Route path="chat" element={<IntervieweePage />} />
-                  <Route path="dashboard" element={<InterviewerDashboard />} />
-                </Routes>
-              </Layout>
-            } />
+            <Route path="/interview" element={<Layout />}>
+              <Route path="chat" element={<IntervieweePage />} />
+              <Route path="dashboard" element={<InterviewerDashboard />} />
+            </Route>
           </Routes>
         </BrowserRouter>
       </PersistGate>
