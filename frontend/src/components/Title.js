@@ -23,7 +23,7 @@ const Title = () => {
           autoplay
         />
       </div>
-
+xz
       {/* Title */}
       <h1 className="text-5xl font-extrabold text-orange-600 mb-4 text-center">
         Smart Interview Assistant
