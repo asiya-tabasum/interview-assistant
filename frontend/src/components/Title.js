@@ -8,7 +8,7 @@ const Title = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate("/home");
+      navigate("/interview/chat");
     }, 5000);
     return () => clearTimeout(timer);
   }, [navigate]);
