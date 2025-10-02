@@ -1,11 +1,32 @@
-import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import InterviewDashboardCard from './InterviewDashboardCard';
+
+const API_BASE = "http://localhost:8000";
 
 function InterviewerDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('score');
   const [sortOrder, setSortOrder] = useState('desc');
-  const { candidates } = useSelector((state) => state.interview);
+  const [candidates, setCandidates] = useState([]);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [candidateDetails, setCandidateDetails] = useState(null);
+
+  // Fetch all candidates on mount
+  useEffect(() => {
+    axios.get(`${API_BASE}/candidates`)
+      .then(res => setCandidates(res.data))
+      .catch(() => setCandidates([]));
+  }, []);
+
+  // Fetch details for selected candidate
+  useEffect(() => {
+    if (selectedCandidate) {
+      axios.get(`${API_BASE}/candidates/${selectedCandidate.id}`)
+        .then(res => setCandidateDetails(res.data))
+        .catch(() => setCandidateDetails(null));
+    }
+  }, [selectedCandidate]);
 
   const sortedAndFilteredCandidates = [...candidates]
     .filter((candidate) =>
@@ -86,7 +107,10 @@ function InterviewerDashboard() {
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button className="text-indigo-600 hover:text-indigo-900">
+                  <button
+                    className="text-indigo-600 hover:text-indigo-900"
+                    onClick={() => setSelectedCandidate(candidate)}
+                  >
                     View Details
                   </button>
                 </td>
@@ -95,6 +119,14 @@ function InterviewerDashboard() {
           </tbody>
         </table>
       </div>
+
+      {/* Candidate Details Card */}
+      {candidateDetails && (
+        <InterviewDashboardCard
+          candidate={candidateDetails.candidate}
+          interviews={candidateDetails.interviews}
+        />
+      )}
     </div>
   );
 }

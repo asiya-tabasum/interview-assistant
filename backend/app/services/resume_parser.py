@@ -23,27 +23,27 @@ class ResumeParser:
         return self._extract_info(text)
 
     def _extract_info(self, text: str) -> Dict[str, Optional[str]]:
-        # Find name (usually at the beginning of the resume)
+       
         name = None
         email = None
         phone = None
 
-        # Extract email
+       
         email_match = re.search(self.email_pattern, text)
         if email_match:
             email = email_match.group()
 
-        # Extract phone
+       
         phone_match = re.search(self.phone_pattern, text)
         if phone_match:
             phone = phone_match.group()
 
-        # Extract name (usually at the top of the resume)
         lines = text.split('\n')
-        for line in lines[:5]:  # Check first 5 lines for name
+        for line in lines[:5]:  
             if re.match(self.name_pattern, line.strip()):
                 name = line.strip()
                 break
+        print(name,email,phone)
 
         return {
             "name": name,

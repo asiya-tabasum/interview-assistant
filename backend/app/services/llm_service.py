@@ -58,13 +58,13 @@ class LLMService:
         return self._parse_summary(response)
 
     def _call_llm(self, prompt: str) -> str:
-        # Initialize Vertex AI API
+     
         client = aiplatform.gapic.VertexAIClient(
             client_options={"api_endpoint": f"{self.location}-aiplatform.googleapis.com"}
         )
         
-        # Set up the model parameters
-        model_name = "text-bison@001"  # or your preferred model
+   
+        model_name = "text-bison@001"  
         parameters = {
             "temperature": 0.7,
             "max_output_tokens": 1024,
@@ -72,14 +72,13 @@ class LLMService:
             "top_k": 40
         }
         
-        # Create the request
+     
         request = aip.PredictRequest(
             endpoint=f"projects/{self.project_id}/locations/{self.location}/publishers/google/models/{model_name}",
             instances=[{"prompt": prompt}],
             parameters=parameters
         )
-        
-        # Make the request
+       
         response = client.predict(request=request)
         return response.predictions[0]
 

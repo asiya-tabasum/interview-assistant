@@ -11,7 +11,7 @@ from app.services.llm_service import LLMService
 
 app = FastAPI()
 
-# CORS configuration
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -20,16 +20,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize services
+
 resume_parser = ResumeParser()
 llm_service = LLMService()
 
-# Database initialization
+
 def init_db():
     conn = sqlite3.connect('interview.db')
     c = conn.cursor()
     
-    # Create candidates table
+ 
     c.execute('''
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +43,7 @@ def init_db():
         )
     ''')
     
-    # Create interviews table
+   
     c.execute('''
         CREATE TABLE IF NOT EXISTS interviews (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,13 +61,13 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Initialize database on startup
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
     os.makedirs('uploads', exist_ok=True)
 
-# Pydantic models
+
 class CandidateBase(BaseModel):
     name: str
     email: str
@@ -94,10 +94,9 @@ class InterviewAnswer(BaseModel):
     time_spent: int
     difficulty: str
 
-# API Endpoints
+
 @app.post("/upload-resume")
 async def upload_resume(file: UploadFile = File(...)):
-    # Validate file type
     if not file.filename.endswith(('.pdf', '.docx')):
         raise HTTPException(status_code=400, detail="File must be PDF or DOCX")
     
@@ -160,11 +159,11 @@ async def get_next_question(candidate_id: int):
     c = conn.cursor()
     
     try:
-        # Get previous questions for this candidate
+       
         c.execute('SELECT question FROM interviews WHERE candidate_id = ?', (candidate_id,))
         previous_questions = [row[0] for row in c.fetchall()]
         
-        # Determine difficulty based on number of questions answered
+   
         num_questions = len(previous_questions)
         if num_questions < 2:
             difficulty = "easy"
@@ -177,8 +176,7 @@ async def get_next_question(candidate_id: int):
             time_limit = 120
         else:
             return {"complete": True}
-        
-        # Generate next question
+       
         question = llm_service.generate_question(difficulty, previous_questions)
         
         return {
@@ -195,14 +193,13 @@ async def submit_answer(answer: InterviewAnswer):
     c = conn.cursor()
     
     try:
-        # Evaluate the answer
+      
         evaluation = llm_service.evaluate_answer(
             answer.question,
             answer.answer,
             answer.difficulty
         )
-        
-        # Store the answer and evaluation
+    
         c.execute('''
             INSERT INTO interviews (candidate_id, question, answer, score, time_spent, difficulty)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -215,12 +212,12 @@ async def submit_answer(answer: InterviewAnswer):
             answer.difficulty
         ))
         
-        # Check if this was the last question
+       
         c.execute('SELECT COUNT(*) FROM interviews WHERE candidate_id = ?', (answer.candidate_id,))
         question_count = c.fetchone()[0]
         
         if question_count >= 6:
-            # Get all answers for final evaluation
+           
             c.execute('''
                 SELECT question, answer, score 
                 FROM interviews 
@@ -232,11 +229,11 @@ async def submit_answer(answer: InterviewAnswer):
                 'score': row[2]
             } for row in c.fetchall()]
             
-            # Generate final summary
+           
             summary = llm_service.generate_summary(answers)
             final_score = sum(a['score'] for a in answers) // len(answers)
             
-            # Update candidate with final results
+     
             c.execute('''
                 UPDATE candidates 
                 SET score = ?, summary = ? 
@@ -287,14 +284,14 @@ async def get_candidate_details(candidate_id: int):
     c = conn.cursor()
     
     try:
-        # Get candidate info
+       
         c.execute('SELECT * FROM candidates WHERE id = ?', (candidate_id,))
         candidate = c.fetchone()
         
         if not candidate:
             raise HTTPException(status_code=404, detail="Candidate not found")
         
-        # Get interview details
+       
         c.execute('SELECT * FROM interviews WHERE candidate_id = ? ORDER BY created_at', (candidate_id,))
         interviews = [{
             "question": row[2],

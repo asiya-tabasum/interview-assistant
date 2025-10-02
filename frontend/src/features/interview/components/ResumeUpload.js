@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useDispatch } from 'react-redux';
 import { setResumeData, setCurrentCandidate } from '../interviewSlice';
+import axios from "axios";
 
 function ResumeUpload({ onStart }) {
   const dispatch = useDispatch();
@@ -13,25 +14,68 @@ function ResumeUpload({ onStart }) {
     phone: '',
   });
   const [missingFields, setMissingFields] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const onDrop = useCallback(async (acceptedFiles) => {
     const file = acceptedFiles[0];
     if (file) {
-      if (file.type === 'application/pdf' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      if (
+        file.type === 'application/pdf' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ) {
         setUploadedFile(file);
-        // Here we would normally send the file to the backend for processing
-        // For now, let's simulate missing fields
-        setMissingFields(['phone']);
-        setFormData({
-          name: 'John Doe', // This would come from backend
-          email: 'john@example.com', // This would come from backend
-          phone: '',
-        });
+        setError(null);
+        setLoading(true);
+
+       
+        const data = new FormData();
+        data.append('file', file);
+
+        try {
+          const response = await axios.post(
+            'http://localhost:8000/upload-resume',
+            data,
+            {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              },
+            }
+          );
+          console.log("response in reume upload", response)
+          if (response.data.success) {
+            const extracted = response.data.data.extracted_info;
+            setFormData({
+              name: extracted.name || '',
+              email: extracted.email || '',
+              phone: extracted.phone || '',
+            });
+
+           
+            const missing = [];
+            if (!extracted.name) missing.push('name');
+            if (!extracted.email) missing.push('email');
+            if (!extracted.phone) missing.push('phone');
+            setMissingFields(missing);
+
+            
+            dispatch(setResumeData({
+              fileName: file.name,
+              fileType: file.type,
+              resumePath: response.data.data.resume_path,
+            }));
+          } else {
+            setError('Failed to extract resume details.');
+          }
+        } catch (err) {
+          setError('Error uploading or parsing resume.');
+        } finally {
+          setLoading(false);
+        }
       } else {
         setError('Please upload a PDF or DOCX file');
       }
     }
-  }, []);
+  }, [dispatch]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -50,9 +94,9 @@ function ResumeUpload({ onStart }) {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validate all required fields are filled
     const newMissingFields = Object.entries(formData)
       .filter(([key, value]) => !value)
@@ -60,19 +104,32 @@ function ResumeUpload({ onStart }) {
 
     if (newMissingFields.length > 0) {
       setError('Please fill in all required fields');
+      setMissingFields(newMissingFields);
       return;
     }
 
-    // Store the candidate data
-    dispatch(setCurrentCandidate(formData));
-    dispatch(setResumeData({
-      fileName: uploadedFile.name,
-      fileType: uploadedFile.type,
-      // Add any other relevant data
-    }));
+    setLoading(true);
+    try {
+      // Save candidate to backend
+      const response = await axios.post("http://localhost:8000/candidates", {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        resume_path: uploadedFile ? uploadedFile.name : null,
+      });
 
-    // Start the interview process
-    onStart();
+      if (response.data && response.data.id) {
+        // Save candidate info to Redux or local state as needed
+        dispatch(setCurrentCandidate(response.data));
+        onStart();
+      } else {
+        setError("Failed to save candidate.");
+      }
+    } catch (err) {
+      setError("Error saving candidate.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -108,6 +165,7 @@ function ResumeUpload({ onStart }) {
             <p className="text-gray-600">
               Drag and drop your resume here, or click to select a file
             </p>
+            {loading && <p className="text-indigo-600 mt-2">Parsing resume...</p>}
           </div>
         </div>
       ) : (
@@ -127,7 +185,7 @@ function ResumeUpload({ onStart }) {
                   id={field}
                   value={formData[field]}
                   onChange={handleInputChange}
-                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm
+                  className={`mt-1 p-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm
                     ${missingFields.includes(field) ? 'border-red-300' : ''}`}
                   placeholder={`Enter your ${field}`}
                   required

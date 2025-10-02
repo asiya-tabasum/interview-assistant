@@ -1,160 +1,131 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import axios from "axios";
 import {
   setCurrentQuestion,
-  submitAnswer,
+  submitAnswer as submitAnswerRedux,
   updateTimer,
   finishInterview,
 } from "../interviewSlice";
 
-const DIFFICULTY_TIMERS = {
-  easy: 20,
-  medium: 60,
-  hard: 120,
-};
+const API_BASE = "http://localhost:8000";
 
 function ChatInterface() {
   const dispatch = useDispatch();
-  const { currentQuestion, timeRemaining, answers, currentCandidate } =
-    useSelector((state) => state.interview);
+  const { currentQuestion, timeRemaining, currentCandidate } =
+  useSelector((state) => state.interview);
 
   const [userInput, setUserInput] = useState("");
   const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
   const timerRef = useRef(null);
 
-  // ------------------------------
-  // Generate random question by difficulty
-  // ------------------------------
-  const getRandomQuestion = useCallback((difficulty) => {
-    const questions = {
-      easy: [
-        "what is React Virtual DOM?",
-        "what are React hooks?",
-      ],
-      medium: [
-        "how does React's diffing algorithm work?",
-        "explain Redux middleware",
-      ],
-      hard: [
-        "how would you optimize a React application's performance?",
-        "explain how you would implement your own state management solution",
-      ],
-    };
-    const arr = questions[difficulty];
-    return arr[Math.floor(Math.random() * arr.length)];
-  }, []);
-
-  // ------------------------------
-  // Handle interview completion
-  // ------------------------------
-  const handleInterviewComplete = useCallback(() => {
-    clearInterval(timerRef.current);
-
-    const mockScore = Math.floor(Math.random() * 40) + 60; // 60–100
-    const mockSummary =
-      "The candidate demonstrated good knowledge of React fundamentals but could improve on advanced concepts. Strong problem-solving skills were evident throughout the interview.";
-
-    dispatch(finishInterview({ score: mockScore, summary: mockSummary }));
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        type: "system",
-        content: `Interview complete! Your score: ${mockScore}%\n\n${mockSummary}`,
-      },
-    ]);
-  }, [dispatch]);
-
-  // ------------------------------
-  // Fetch next question
-  // ------------------------------
-  const fetchNextQuestion = useCallback(() => {
-    const currentCount = answers.length;
-
-    if (currentCount >= 6) {
-      handleInterviewComplete();
-      return;
+  // Fetch next question from backend
+  const fetchNextQuestion = useCallback(async () => {
+    if (!currentCandidate?.id) return;
+    setLoading(true);
+    try {
+      const res = await axios.get(
+        `${API_BASE}/next-question/${currentCandidate.id}`
+      );
+      if (res.data && res.data.question) {
+        dispatch(setCurrentQuestion(res.data));
+      } else {
+        // Interview complete
+        fetchFinalSummary();
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { type: "system", content: "Error fetching next question." },
+      ]);
+    } finally {
+      setLoading(false);
     }
+    // eslint-disable-next-line
+  }, [currentCandidate?.id, dispatch]);
 
-    let difficulty;
-    if (currentCount < 2) difficulty = "easy";
-    else if (currentCount < 4) difficulty = "medium";
-    else difficulty = "hard";
-
-    const mockQuestion = {
-      id: currentCount + 1,
-      text: `${difficulty.toUpperCase()} Question ${
-        currentCount + 1
-      }: Please explain ${getRandomQuestion(difficulty)}`,
-      difficulty,
-      timeLimit: DIFFICULTY_TIMERS[difficulty],
-    };
-
-    dispatch(setCurrentQuestion(mockQuestion));
-  }, [answers.length, dispatch, getRandomQuestion, handleInterviewComplete]);
-
-  // ------------------------------
-  // Submit answer
-  // ------------------------------
-  const handleSubmit = useCallback(
-    (timeUp = false) => {
-      if (!timeUp && !userInput.trim()) return;
-
-      clearInterval(timerRef.current);
-
-      const answerText = timeUp
-        ? "(Time expired - No answer provided)"
-        : userInput.trim();
-
-      setMessages((prev) => [...prev, { type: "user", content: answerText }]);
-      dispatch(submitAnswer(answerText));
-      setUserInput("");
-
-      fetchNextQuestion();
-    },
-    [dispatch, userInput, fetchNextQuestion]
-  );
-
-  // ------------------------------
-  // Handle time expiry
-  // ------------------------------
-  const handleTimeUp = useCallback(() => {
-    clearInterval(timerRef.current);
-    handleSubmit(true);
-  }, [handleSubmit]);
-
-  // ------------------------------
-  // Start timer for question
-  // ------------------------------
-  const startTimer = useCallback(
-    (difficulty) => {
-      clearInterval(timerRef.current);
-
-      const timeLimit = DIFFICULTY_TIMERS[difficulty];
-      dispatch(updateTimer(timeLimit));
-
-      timerRef.current = setInterval(() => {
-        dispatch((dispatch, getState) => {
-          const { interview } = getState();
-          const newTime = interview.timeRemaining - 1;
-
-          if (newTime <= 0) {
-            clearInterval(timerRef.current);
-            dispatch(updateTimer(0));
-            handleTimeUp();
-          } else {
-            dispatch(updateTimer(newTime));
-          }
+  // Submit answer to backend
+  const submitAnswer = useCallback(
+    async (answerText, timeSpent, timeUp = false) => {
+      if (!currentCandidate?.id || !currentQuestion) return;
+      setLoading(true);
+      try {
+        await axios.post(`${API_BASE}/submit-answer`, {
+          candidate_id: currentCandidate.id,
+          question: currentQuestion.text,
+          answer: timeUp ? "(Time expired - No answer provided)" : answerText,
+          time_spent: timeSpent,
+          difficulty: currentQuestion.difficulty,
         });
-      }, 1000);
+        dispatch(submitAnswerRedux(answerText));
+        setUserInput("");
+        fetchNextQuestion();
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          { type: "system", content: "Error submitting answer." },
+        ]);
+      } finally {
+        setLoading(false);
+      }
     },
-    [dispatch, handleTimeUp]
+    [currentCandidate?.id, currentQuestion, dispatch, fetchNextQuestion]
   );
 
-  // ------------------------------
+  // Fetch final summary and score from backend
+  const fetchFinalSummary = useCallback(async () => {
+    if (!currentCandidate?.id) return;
+    setLoading(true);
+    try {
+      const res = await axios.get(
+        `${API_BASE}/candidates/${currentCandidate.id}`
+      );
+      if (res.data) {
+        dispatch(
+          finishInterview({ score: res.data.score, summary: res.data.summary })
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "system",
+            content: `Interview complete! Your score: ${res.data.score}%\n\n${res.data.summary}`,
+          },
+        ]);
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { type: "system", content: "Error fetching interview summary." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentCandidate?.id, dispatch]);
+
+  // Timer logic
+  useEffect(() => {
+    if (!currentQuestion) return;
+    clearInterval(timerRef.current);
+    let timeLeft = currentQuestion.time_limit;
+    dispatch(updateTimer(timeLeft));
+    timerRef.current = setInterval(() => {
+      timeLeft -= 1;
+      dispatch(updateTimer(timeLeft));
+      if (timeLeft <= 0) {
+        clearInterval(timerRef.current);
+        setMessages((prev) => [
+          ...prev,
+          { type: "user", content: "(Time expired - No answer provided)" },
+        ]);
+        submitAnswer("", currentQuestion.time_limit, true);
+      }
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [currentQuestion, dispatch, submitAnswer]);
+
   // Initial greeting + first question
-  // ------------------------------
   useEffect(() => {
     if (messages.length === 0 && currentCandidate?.name) {
       setMessages([
@@ -165,40 +136,38 @@ function ChatInterface() {
       ]);
       fetchNextQuestion();
     }
+    // eslint-disable-next-line
   }, [currentCandidate, messages.length, fetchNextQuestion]);
 
-  // ------------------------------
-  // Show new question + start timer
-  // ------------------------------
+  // Show new question
   useEffect(() => {
     if (currentQuestion) {
       setMessages((prev) => [
         ...prev,
         { type: "system", content: currentQuestion.text },
       ]);
-      startTimer(currentQuestion.difficulty);
     }
-  }, [currentQuestion, startTimer]);
+  }, [currentQuestion]);
 
-  // ------------------------------
   // Scroll to bottom when messages change
-  // ------------------------------
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ------------------------------
   // Format time
-  // ------------------------------
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // ------------------------------
-  // Render
-  // ------------------------------
+  // Handle user submit
+  const handleSubmit = () => {
+    if (!userInput.trim() || !currentQuestion || loading) return;
+    setMessages((prev) => [...prev, { type: "user", content: userInput.trim() }]);
+    submitAnswer(userInput.trim(), currentQuestion.time_limit - timeRemaining, false);
+  };
+
   return (
     <div className="flex flex-col h-[80vh] bg-white rounded-lg shadow-lg">
       {/* Chat messages */}
@@ -247,11 +216,11 @@ function ChatInterface() {
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             placeholder="Type your answer..."
             className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            disabled={!currentQuestion || timeRemaining === 0}
+            disabled={!currentQuestion || timeRemaining === 0 || loading}
           />
           <button
-            onClick={() => handleSubmit()}
-            disabled={!currentQuestion || timeRemaining === 0}
+            onClick={handleSubmit}
+            disabled={!currentQuestion || timeRemaining === 0 || loading}
             className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
           >
             Send
